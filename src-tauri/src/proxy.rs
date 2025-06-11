@@ -1,9 +1,10 @@
-use reqwest::{Body, Client, Method, StatusCode};
+use reqwest::{Client, Method, StatusCode};
 use serde::{Deserialize, Serialize};
-use serde_json::Value;
+use serde_json::{Number, Value};
 use std::collections::HashMap;
 use std::vec;
 use std::{net::SocketAddr, sync::Arc};
+use tauri::ipc::IpcResponse;
 use tauri::{AppHandle, Manager, Runtime, State};
 use tokio::sync::Mutex;
 use warp::{body::bytes, http::HeaderValue, http::Response, Filter};
@@ -94,6 +95,7 @@ async fn handle_proxy(
                 .unwrap())
         }
     };
+    let is_stream = params.get("stream").map(|v| v == "true").unwrap_or(false);
 
     let client = reqwest::Client::builder()
         .redirect(reqwest::redirect::Policy::limited(5))
@@ -101,17 +103,17 @@ async fn handle_proxy(
         .unwrap();
     let mut req = client.get(&url);
 
+    let mut all_headers: HashMap<String, String> = HashMap::new();
+    let skip_headers = ["host", "content-length", "origin", "referer"];
     // Use pre existing headers
     for (key, val) in headers.iter() {
         if let Ok(mut val_str) = val.to_str() {
             val_str = val_str.trim();
-            if val_str.to_lowercase().contains("origin")
-                || val_str.to_lowercase().contains("referer")
-                || val_str.to_lowercase().contains("host")
-            {
+            if skip_headers.contains(&val_str.to_lowercase().trim()) {
                 continue;
             }
-            req = req.header(key, val_str);
+            all_headers.insert(key.to_string().trim().to_lowercase(), val_str.to_string());
+            // req = req.header(key, val_str);
         }
     }
 
@@ -122,17 +124,28 @@ async fn handle_proxy(
             if let Some(obj) = json_val.as_object() {
                 for (key, val) in obj.iter() {
                     if let Some(val_str) = val.as_str() {
-                        req = req.header(key.to_lowercase(), val_str);
+                        all_headers
+                            .insert(key.trim().to_string().to_lowercase(), val_str.to_string());
+                        // req = req.header(key.to_lowercase(), val_str);
                     }
                 }
             }
         }
     }
 
+    for (key, val) in all_headers.iter() {
+        req = req.header(key, val);
+    }
+
+    print!(
+        "Request Config----------\n\n Query : {:?} \nHeaders : {:?}",
+        params,
+        serde_json::to_string_pretty(&all_headers).unwrap(),
+    );
+
     let res = req.send().await.map_err(|_| warp::reject())?;
     let status = res.status();
     let headers = res.headers().clone();
-    let body = res.bytes().await.map_err(|_| warp::reject())?;
 
     let mut builder = warp::http::Response::builder().status(status);
     for (k, v) in headers {
@@ -141,8 +154,18 @@ async fn handle_proxy(
         }
     }
 
-    let response = builder.body(body).unwrap();
-    Ok::<_, warp::Rejection>(response)
+    if is_stream {
+        let stream = res.bytes_stream();
+        let body_stream = warp::hyper::Body::wrap_stream(stream);
+
+        let response = builder.body(body_stream).unwrap();
+        Ok::<_, warp::Rejection>(response)
+    } else {
+        let body = res.bytes().await.map_err(|_| warp::reject())?;
+        let body_data = warp::hyper::Body::from(body);
+        let response = builder.body(body_data).unwrap();
+        Ok::<_, warp::Rejection>(response)
+    }
 }
 
 pub async fn start_media_proxy() {
