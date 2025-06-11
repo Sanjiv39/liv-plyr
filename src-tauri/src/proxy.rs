@@ -1,3 +1,4 @@
+use regex::Regex;
 use reqwest::{Client, Method, StatusCode};
 use serde::{Deserialize, Serialize};
 use serde_json::{Number, Value};
@@ -82,6 +83,7 @@ async fn handle_proxy(
     headers: warp::http::HeaderMap,
     body: warp::hyper::body::Bytes,
 ) -> Result<impl warp::Reply, warp::Rejection> {
+    let skip_patterns = vec![Regex::new(r"(host|origin|referer)").unwrap()];
     print!(
         "Method : {}\nParams : {:?}\nHeaders : {:?}\nBody : {:?} \n",
         method, params, headers, body
@@ -109,11 +111,15 @@ async fn handle_proxy(
     for (key, val) in headers.iter() {
         if let Ok(mut val_str) = val.to_str() {
             val_str = val_str.trim();
-            if skip_headers.contains(&val_str.to_lowercase().trim()) {
-                continue;
+            match skip_patterns
+                .iter()
+                .find(|pattern| pattern.is_match(val_str.trim()))
+            {
+                Some(_) => continue,
+                None => {
+                    all_headers.insert(key.to_string().trim().to_lowercase(), val_str.to_string());
+                } // req = req.header(key, val_str);
             }
-            all_headers.insert(key.to_string().trim().to_lowercase(), val_str.to_string());
-            // req = req.header(key, val_str);
         }
     }
 
@@ -138,17 +144,17 @@ async fn handle_proxy(
     }
 
     print!(
-        "Request Config----------\n\n Query : {:?} \nHeaders : {:?}",
+        "\nRequest Config----------\n\n Query : {:?} \nHeaders : {}",
         params,
         serde_json::to_string_pretty(&all_headers).unwrap(),
     );
 
     let res = req.send().await.map_err(|_| warp::reject())?;
     let status = res.status();
-    let headers = res.headers().clone();
+    let res_headers = res.headers().clone();
 
     let mut builder = warp::http::Response::builder().status(status);
-    for (k, v) in headers {
+    for (k, v) in res_headers {
         if let (Some(k), Ok(v)) = (k, v.to_str()) {
             builder = builder.header(k, v);
         }
