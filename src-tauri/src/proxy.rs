@@ -83,7 +83,7 @@ async fn handle_proxy(
     headers: warp::http::HeaderMap,
     body: warp::hyper::body::Bytes,
 ) -> Result<impl warp::Reply, warp::Rejection> {
-    let skip_patterns = vec![Regex::new(r"(host|origin|referer)").unwrap()];
+    let skip_patterns = vec![Regex::new(r"(host|origin|referer|sec[-])").unwrap()];
     print!(
         "Method : {}\nParams : {:?}\nHeaders : {:?}\nBody : {:?} \n",
         method, params, headers, body
@@ -108,20 +108,29 @@ async fn handle_proxy(
     let mut all_headers: HashMap<String, String> = HashMap::new();
     let skip_headers = ["host", "content-length", "origin", "referer"];
     // Use pre existing headers
-    for (key, val) in headers.iter() {
-        if let Ok(mut val_str) = val.to_str() {
-            val_str = val_str.trim();
-            match skip_patterns
-                .iter()
-                .find(|pattern| pattern.is_match(val_str.trim()))
-            {
-                Some(_) => continue,
-                None => {
-                    all_headers.insert(key.to_string().trim().to_lowercase(), val_str.to_string());
-                } // req = req.header(key, val_str);
+    // for (key, val) in headers.iter() {
+    //     if let Ok(mut val_str) = val.to_str() {
+    //         val_str = val_str.trim();
+    //         match skip_patterns
+    //             .iter()
+    //             .find(|pattern| pattern.is_match(val_str.trim()))
+    //         {
+    //             Some(_) => continue,
+    //             None => {
+    //                 all_headers.insert(key.to_string().trim().to_lowercase(), val_str.to_string());
+    //             } // req = req.header(key, val_str);
+    //         }
+    //     }
+    // }
+    if let Some(value) = headers.get("cookie") {
+        if let Ok(mut value_str) = value.to_str() {
+            value_str = value_str.trim();
+            if value_str.len() != 0 {
+                print!("\nCookie found : {}\n", value_str);
+                all_headers.insert("cookie".trim().to_string(), value_str.to_string());
             }
         }
-    }
+    };
 
     // Append custom headers
     let headers_json = params.get("headers");
