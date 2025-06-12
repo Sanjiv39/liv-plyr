@@ -1,5 +1,6 @@
 import { AxiosHeaderValue } from "axios";
 import { ContentType } from "../types/content-types";
+import { PROXY } from "../services/apis/config";
 
 type ProxyHeaderKey =
   | "Host"
@@ -24,14 +25,15 @@ export type ProxyHeaders = {
   "Content-Type": ContentType;
 } & Record<ProxyHeaderKey, AxiosHeaderValue>;
 
-type GenerateProxyOptions = {
+export type GenerateProxyOptions = {
   streamResponse: boolean;
 };
 
 export const generateProxyConfig = (
   url: string,
   options?: Partial<GenerateProxyOptions>,
-  headers?: Partial<ProxyHeaders>
+  headers?: Partial<ProxyHeaders>,
+  throwError?: boolean
 ) => {
   try {
     if (
@@ -64,21 +66,31 @@ export const generateProxyConfig = (
       ...options,
     };
 
+    const query = `?url=${encodeURIComponent(
+      url
+    )}&stream=${!!allOptions.streamResponse}&headers=${encodeURIComponent(
+      JSON.stringify(headers || {})
+    )}`;
+
     const data = {
       targetUrl: url,
       headers: headers || null,
       /**
-       * @description The Querry URL that can be embedded along with `?`
+       * @description The Query URL that can be prepended to proxy request
        * @description It contains encoded `target-url` and encoded `headers`
        */
-      queryUrl: `?url=${encodeURIComponent(
-        url
-      )}&stream=${!!allOptions.streamResponse}&headers=${encodeURIComponent(
-        JSON.stringify(headers || {})
-      )}`,
+      queryUrl: query,
+      /**
+       * @description The Complete Proxy URL that will request
+       * @description It is in the format `<proxyBaseUrl>?<proxyQuery>`
+       */
+      fullUrl: `${PROXY.defaults.baseURL}${query}`,
     };
     return data;
   } catch (err) {
+    if (throwError) {
+      throw err;
+    }
     console.error("Error generating proxy config");
     return null;
   }

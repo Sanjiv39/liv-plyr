@@ -194,7 +194,7 @@ pub async fn start_media_proxy() {
     let addr: SocketAddr = "127.0.0.1:5009".parse().unwrap();
     let cors = warp::cors()
         .allow_any_origin()
-        .allow_methods(["GET", "POST", "PUT", "DELETE", "HEAD"])
+        .allow_methods(["GET", "POST", "PUT", "DELETE", "HEAD", "PATCH"])
         .allow_headers(vec!["*"])
         .allow_credentials(true);
     warp::serve(route.with(cors))

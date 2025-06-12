@@ -1,8 +1,11 @@
 import { useState } from "react";
-import reactLogo from "./assets/react.svg";
 import { invoke } from "@tauri-apps/api/core";
-import axios from "axios";
+import Hls from "hls.js";
+import reactLogo from "./assets/react.svg";
+// import axios from "axios";
+import { proxyRequest } from "./services/apis/proxy";
 import "./App.css";
+import { generateProxyConfig } from "./utils/proxy";
 
 console.log(navigator.userAgent);
 const headers = {
@@ -10,15 +13,24 @@ const headers = {
 };
 const url =
   "http://dev.stream.tg-iptv.site/playlist.m3u?name=all&tk=0193cdc2-c42b-722d-9a29-0b7917aa62cd";
-axios
-  .get(
-    `http://localhost:5009?url=${encodeURIComponent(
-      url
-    )}&headers=${encodeURIComponent(JSON.stringify(headers))}`,
-    { withCredentials: true }
-  )
-  .then()
-  .catch();
+proxyRequest("get", { url: url, headers: headers });
+
+const hls = new Hls();
+const proxyData = generateProxyConfig(
+  "https://movie.tg-iptv.site/movies/939243/master.m3u8",
+  undefined,
+  headers
+);
+hls.trigger
+hls.loadSource(proxyData?.fullUrl || "");
+// .get(
+//   `http://localhost:5009?url=${encodeURIComponent(
+//     url
+//   )}&headers=${encodeURIComponent(JSON.stringify(headers))}`,
+//   { withCredentials: true }
+// )
+// .then()
+// .catch();
 
 const res: { status: number; statusText?: string; data: string } = await invoke(
   "proxy_request",
