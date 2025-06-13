@@ -91,14 +91,14 @@ async fn handle_proxy(
     body: warp::hyper::body::Bytes,
 ) -> Result<impl warp::Reply, warp::Rejection> {
     let skip_patterns = vec![Regex::new(r"(host|origin|referer|sec[-])").unwrap()];
-    print!(
-        "Method : {}\nParams : {:?}\nHeaders : {:?}\nBody : {:?} \n",
-        method, params, headers, body
-    );
 
     let decoded_params = urlencoding::decode(&param).map_err(|_| warp::reject())?;
     let params_parsed: serde_json::Value =
         serde_json::from_str(&decoded_params).map_err(|_| warp::reject())?;
+    print!(
+        "Args ---------------------------------\nMethod : {}\nParams : {:?}\n Tail : {:?}\nHeaders : {:?}\nBody : {:?} \n",
+        method, params_parsed.as_object().unwrap(), tail.as_str(), headers, body
+    );
 
     let url = params_parsed.get("url").unwrap().as_str().unwrap().trim();
     if url.len() == 0
@@ -126,13 +126,18 @@ async fn handle_proxy(
     //             .unwrap())
     //     }
     // };
-    let is_stream = params.get("stream").map(|v| v == "true").unwrap_or(false);
+    let is_stream = params_parsed
+        .get("stream")
+        .map(|v| v == true)
+        .unwrap_or(false);
 
     let client = reqwest::Client::builder()
         .redirect(reqwest::redirect::Policy::limited(5))
         .build()
         .unwrap();
-    let mut req = client.get(url);
+    let target_url = url.to_string() + tail.as_str();
+    println!("Target url : {:?}", target_url);
+    let mut req = client.get(target_url);
 
     let mut all_headers: HashMap<String, String> = HashMap::new();
     let skip_headers = ["host", "content-length", "origin", "referer"];
@@ -162,19 +167,27 @@ async fn handle_proxy(
     };
 
     // Append custom headers
-    let headers_json = params.get("headers");
-    if let Some(headers_str) = headers_json {
-        if let Ok(json_val) = serde_json::from_str::<Value>(headers_str) {
-            if let Some(obj) = json_val.as_object() {
-                for (key, val) in obj.iter() {
-                    if let Some(val_str) = val.as_str() {
-                        all_headers
-                            .insert(key.trim().to_string().to_lowercase(), val_str.to_string());
-                        // req = req.header(key.to_lowercase(), val_str);
-                    }
+    let headers_json = params_parsed.get("headers");
+    // if let Some(headers_str) = headers_json {
+    // if let Ok(json_val) = serde_json::from_str::<Value>(headers_str) {
+    if let Some(obj) = headers_json.unwrap().as_object() {
+        for (key, val) in obj {
+            match val {
+                Value::String(s) => {
+                    all_headers.insert(key.trim().to_string().to_lowercase(), s.to_string());
                 }
+                Value::Number(s) => {
+                    all_headers.insert(key.trim().to_string().to_lowercase(), s.to_string());
+                }
+                Value::Bool(s) => {
+                    all_headers.insert(key.trim().to_string().to_lowercase(), s.to_string());
+                }
+                _ => {}
             }
+            // all_headers.insert(key.trim().to_string().to_lowercase(), val_str.to_string());
         }
+        // }
+        // }
     }
 
     for (key, val) in all_headers.iter() {
@@ -206,22 +219,26 @@ async fn handle_proxy(
         // let body_stream = warp::hyper::Body::wrap_stream(stream);
 
         // let response = builder.body(body_stream).unwrap();
+        println!("Pre Res: stream");
         let response = warp_response_builder(
             status.as_u16(),
             utils::ProxyBody::Stream(Box::pin(stream)),
             res_headers_json.clone(),
         )
         .unwrap();
+        println!("Pre End: stream");
         return Ok::<_, warp::Rejection>(response);
     } else {
         let body = res.bytes().await.map_err(|_| warp::reject())?;
         // let body_data = warp::hyper::Body::from(body);
+        println!("Pre Res: normal");
         let response = warp_response_builder(
             status.as_u16(),
             utils::ProxyBody::Bytes(body),
             res_headers_json.clone(),
         )
         .unwrap();
+        println!("Pre End: normal");
         Ok::<_, warp::Rejection>(response)
     }
 }

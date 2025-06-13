@@ -43,9 +43,18 @@ pub fn warp_response_builder(
 ) -> Result<impl warp::Reply, warp::Rejection> {
     let mut builder = Response::builder().status(StatusCode::from_u16(status).unwrap());
 
+    println!(
+        "Builder Param [headers] : {:?}",
+        headers.as_object().unwrap()
+    );
+
     for (key, val) in headers.as_object().unwrap() {
-        if val.to_string().trim().len() != 0 {
-            builder = builder.header(key, val.to_string());
+        if val.is_string() {
+            builder = builder.header(key, val.as_str().unwrap());
+        } else {
+            if val.to_string().trim().len() != 0 {
+                builder = builder.header(key, val.to_string());
+            }
         }
     }
 
