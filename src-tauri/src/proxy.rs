@@ -1,3 +1,4 @@
+use crate::port::get_port;
 use crate::utils::{self, headers_to_json, warp_response_builder};
 use futures_util::{StreamExt, TryStreamExt};
 use http::HeaderMap;
@@ -6,7 +7,7 @@ use reqwest::{Client, Method, StatusCode};
 use serde::{Deserialize, Serialize};
 use serde_json::{Number, Value};
 use std::collections::HashMap;
-use std::vec;
+use std::{any, vec};
 use std::{net::SocketAddr, sync::Arc};
 use tauri::ipc::IpcResponse;
 use tauri::{AppHandle, Manager, Runtime, State};
@@ -243,7 +244,16 @@ async fn handle_proxy(
     }
 }
 
-pub async fn start_media_proxy() {
+pub async fn start_media_proxy() -> Result<bool, std::io::Error> {
+    let ports = get_port();
+    if ports.is_err() {
+        return Err(std::io::Error::new(
+            ports.as_ref().err().unwrap().kind(),
+            ports.as_ref().err().unwrap().to_string(),
+        ));
+    }
+    let uw_ports = ports.ok().unwrap();
+
     let route = warp::path::param()
         .and(warp::path::tail())
         .and(warp::method())
@@ -261,4 +271,6 @@ pub async fn start_media_proxy() {
     warp::serve(route.with(cors))
         .run(([127, 0, 0, 1], 5009))
         .await;
+
+    return Ok(true);
 }
