@@ -27,6 +27,7 @@ export type ProxyHeaders = {
 
 export type GenerateProxyOptions = {
   streamResponse: boolean;
+  appendPathIfStream: boolean;
 };
 
 export const generateProxyConfig = (
@@ -60,17 +61,32 @@ export const generateProxyConfig = (
     }
 
     const allOptions: Partial<GenerateProxyOptions> & {
-      streamResponse: boolean;
+      appender: string;
     } = {
+      appender: "",
       streamResponse: false,
+      appendPathIfStream: false,
       ...options,
     };
+
+    if (allOptions.appendPathIfStream) {
+      const match = url.match(/\/[^\/]+[.](m3u|m3u8|ts|m4s|mpd|xml|dash)$/);
+      url = match ? url.replace(match[0], "") : url;
+      allOptions.appender = `/${match?.[0] || ""}`.replace(/\$/, "");
+    }
 
     const query = `?url=${encodeURIComponent(
       url
     )}&stream=${!!allOptions.streamResponse}&headers=${encodeURIComponent(
       JSON.stringify(headers || {})
     )}`;
+
+    const params = {
+      url: url,
+      headers: headers || {},
+      stream: !!allOptions.streamResponse,
+    };
+    const encodedParams = encodeURIComponent(JSON.stringify(params));
 
     const data = {
       targetUrl: url,
@@ -82,9 +98,19 @@ export const generateProxyConfig = (
       queryUrl: query,
       /**
        * @description The Complete Proxy URL that will request
-       * @description It is in the format `<proxyBaseUrl>?<proxyQuery>`
+       * @description It is in the format `<proxy-base-url>?<proxyQuery>`
        */
       fullUrl: `${PROXY.defaults.baseURL}${query}`,
+      /**
+       * @description The encoded path parameter, to support relative-URI too from `XHR`
+       * @description It can be used in the proxy as `<proxy-base-url>/<encodedConfigParams>...more?`
+       */
+      encodedConfigPath: encodedParams + allOptions.appender,
+      /**
+       * @description The complete url with encoded path parameter.
+       * @description Has the `proxy-base-url` and `encoded-params` joined as paths
+       */
+      fullEncodedConfigUrl: `${PROXY.defaults.baseURL}/${encodedParams}${allOptions.appender}`,
     };
     return data;
   } catch (err) {

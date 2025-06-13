@@ -18,11 +18,11 @@ proxyRequest("get", { url: url, headers: headers });
 const hls = new Hls();
 const proxyData = generateProxyConfig(
   "https://movie.tg-iptv.site/movies/939243/master.m3u8",
-  undefined,
+  { appendPathIfStream: true },
   headers
 );
-hls.trigger
-hls.loadSource(proxyData?.fullUrl || "");
+// hls.trigger;
+hls.loadSource(proxyData?.fullEncodedConfigUrl || "");
 // .get(
 //   `http://localhost:5009?url=${encodeURIComponent(
 //     url
