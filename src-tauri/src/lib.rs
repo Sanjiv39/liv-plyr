@@ -1,5 +1,6 @@
 mod proxy;
 use proxy::{proxy_request, start_media_proxy};
+pub mod utils;
 
 // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
 #[tauri::command]

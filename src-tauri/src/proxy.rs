@@ -1,3 +1,6 @@
+use crate::utils::{self, headers_to_json, warp_response_builder};
+use futures_util::{StreamExt, TryStreamExt};
+use http::HeaderMap;
 use regex::Regex;
 use reqwest::{Client, Method, StatusCode};
 use serde::{Deserialize, Serialize};
@@ -8,6 +11,8 @@ use std::{net::SocketAddr, sync::Arc};
 use tauri::ipc::IpcResponse;
 use tauri::{AppHandle, Manager, Runtime, State};
 use tokio::sync::Mutex;
+use urlencoding;
+use warp::filters::path::param;
 use warp::{body::bytes, http::HeaderValue, http::Response, Filter};
 
 #[derive(Deserialize)]
@@ -78,6 +83,8 @@ pub async fn proxy_request(req: ProxyRequest) -> Result<AxiosLikeResponse, Strin
 }
 
 async fn handle_proxy(
+    param: String,
+    tail: warp::path::Tail,
     method: Method,
     params: std::collections::HashMap<String, String>,
     headers: warp::http::HeaderMap,
@@ -88,22 +95,44 @@ async fn handle_proxy(
         "Method : {}\nParams : {:?}\nHeaders : {:?}\nBody : {:?} \n",
         method, params, headers, body
     );
-    let url = match params.get("url") {
-        Some(u) => u.clone(),
-        None => {
-            return Ok(Response::builder()
-                .status(400)
-                .body("Missing 'url' param".into())
-                .unwrap())
-        }
-    };
+
+    let decoded_params = urlencoding::decode(&param).map_err(|_| warp::reject())?;
+    let params_parsed: serde_json::Value =
+        serde_json::from_str(&decoded_params).map_err(|_| warp::reject())?;
+
+    let url = params_parsed.get("url").unwrap().as_str().unwrap().trim();
+    if url.len() == 0
+        || Regex::new(r"[\n ]+").unwrap().is_match(url)
+        || Regex::new(r"^http(s|)://[^. ]+[.][^. ]+")
+            .unwrap()
+            .is_match(url)
+            == false
+    {
+        return warp_response_builder(
+            400,
+            utils::ProxyBody::Json(serde_json::json!(
+                {"success": false, "error": "Invalid param [url]. Must be a valid http url.", "type": "invalid-url"
+            })),
+            serde_json::json!({"X-Err-Type": "invalid-url"}),
+        );
+    }
+
+    // let url = match params.get("url") {
+    //     Some(u) => u.clone(),
+    //     None => {
+    //         return Ok(Response::builder()
+    //             .status(400)
+    //             .body("Missing 'url' param".into())
+    //             .unwrap())
+    //     }
+    // };
     let is_stream = params.get("stream").map(|v| v == "true").unwrap_or(false);
 
     let client = reqwest::Client::builder()
         .redirect(reqwest::redirect::Policy::limited(5))
         .build()
         .unwrap();
-    let mut req = client.get(&url);
+    let mut req = client.get(url);
 
     let mut all_headers: HashMap<String, String> = HashMap::new();
     let skip_headers = ["host", "content-length", "origin", "referer"];
@@ -163,28 +192,43 @@ async fn handle_proxy(
     let res_headers = res.headers().clone();
 
     let mut builder = warp::http::Response::builder().status(status);
-    for (k, v) in res_headers {
+    for (k, v) in res_headers.clone() {
         if let (Some(k), Ok(v)) = (k, v.to_str()) {
             builder = builder.header(k, v);
         }
     }
+    let res_headers_json = serde_json::json!(headers_to_json(&res_headers.clone()));
 
     if is_stream {
-        let stream = res.bytes_stream();
-        let body_stream = warp::hyper::Body::wrap_stream(stream);
+        let stream = res
+            .bytes_stream()
+            .map(|item| item.map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e)));
+        // let body_stream = warp::hyper::Body::wrap_stream(stream);
 
-        let response = builder.body(body_stream).unwrap();
-        Ok::<_, warp::Rejection>(response)
+        // let response = builder.body(body_stream).unwrap();
+        let response = warp_response_builder(
+            status.as_u16(),
+            utils::ProxyBody::Stream(Box::pin(stream)),
+            res_headers_json.clone(),
+        )
+        .unwrap();
+        return Ok::<_, warp::Rejection>(response);
     } else {
         let body = res.bytes().await.map_err(|_| warp::reject())?;
-        let body_data = warp::hyper::Body::from(body);
-        let response = builder.body(body_data).unwrap();
+        // let body_data = warp::hyper::Body::from(body);
+        let response = warp_response_builder(
+            status.as_u16(),
+            utils::ProxyBody::Bytes(body),
+            res_headers_json.clone(),
+        )
+        .unwrap();
         Ok::<_, warp::Rejection>(response)
     }
 }
 
 pub async fn start_media_proxy() {
-    let route = warp::any()
+    let route = warp::path::param()
+        .and(warp::path::tail())
         .and(warp::method())
         .and(warp::query::<std::collections::HashMap<String, String>>())
         .and(warp::header::headers_cloned())
