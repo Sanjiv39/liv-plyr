@@ -3,8 +3,8 @@ use rand::{rng, Rng};
 use std::{collections::HashMap, io::Error, vec};
 
 pub struct PortsFound {
-    backend: Option<u16>,
-    frontend: Option<u16>,
+    pub backend: Option<u16>,
+    pub frontend: Option<u16>,
 }
 
 const HOST: &str = "http://localhost";

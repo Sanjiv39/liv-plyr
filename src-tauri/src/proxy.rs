@@ -247,12 +247,18 @@ async fn handle_proxy(
 pub async fn start_media_proxy() -> Result<bool, std::io::Error> {
     let ports = get_port();
     if ports.is_err() {
-        return Err(std::io::Error::new(
-            ports.as_ref().err().unwrap().kind(),
-            ports.as_ref().err().unwrap().to_string(),
-        ));
+        let err = ports.as_ref().err().unwrap();
+        return Err(std::io::Error::new(err.kind(), err.to_string()));
     }
-    let uw_ports = ports.ok().unwrap();
+    let backend_port = match ports.unwrap().backend {
+        Some(p) => p,
+        None => {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                "Port invalid",
+            ));
+        }
+    };
 
     let route = warp::path::param()
         .and(warp::path::tail())
@@ -262,14 +268,16 @@ pub async fn start_media_proxy() -> Result<bool, std::io::Error> {
         .and(warp::body::bytes())
         .and_then(handle_proxy);
 
-    let addr: SocketAddr = "127.0.0.1:5009".parse().unwrap();
+    let addr: SocketAddr = ("127.0.0.1:".to_string() + backend_port.to_string().as_str())
+        .parse()
+        .unwrap();
     let cors = warp::cors()
         .allow_any_origin()
         .allow_methods(["GET", "POST", "PUT", "DELETE", "HEAD", "PATCH"])
         .allow_headers(vec!["*"])
         .allow_credentials(true);
     warp::serve(route.with(cors))
-        .run(([127, 0, 0, 1], 5009))
+        .run(([127, 0, 0, 1], backend_port))
         .await;
 
     return Ok(true);
