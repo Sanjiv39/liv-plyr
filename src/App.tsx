@@ -4,33 +4,21 @@ import Hls from "hls.js";
 import reactLogo from "./assets/react.svg";
 // import axios from "axios";
 import { proxyRequest } from "./services/apis/proxy";
-import "./App.css";
 import { generateProxyConfig } from "./utils/proxy";
+import "./App.css";
 
-console.log(navigator.userAgent);
-const headers = {
-  "User-Agent": "Smarters IPTV",
-};
-const url =
-  "http://dev.stream.tg-iptv.site/playlist.m3u?name=all&tk=0193cdc2-c42b-722d-9a29-0b7917aa62cd";
+const headers = {};
+const url = "https://movie.tg-iptv.site/movies/939243/master.m3u8";
 proxyRequest("get", { url: url, headers: headers });
 
 const hls = new Hls();
 const proxyData = generateProxyConfig(
   "https://movie.tg-iptv.site/movies/939243/master.m3u8",
-  { appendPathIfStream: true },
+  undefined,
   headers
 );
 // hls.trigger;
 hls.loadSource(proxyData?.fullEncodedConfigUrl || "");
-// .get(
-//   `http://localhost:5009?url=${encodeURIComponent(
-//     url
-//   )}&headers=${encodeURIComponent(JSON.stringify(headers))}`,
-//   { withCredentials: true }
-// )
-// .then()
-// .catch();
 
 const res: { status: number; statusText?: string; data: string } = await invoke(
   "proxy_request",
@@ -51,7 +39,6 @@ function App() {
   const [name, setName] = useState("");
 
   async function greet() {
-    // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
     setGreetMsg(await invoke("greet", { name }));
   }
 
@@ -87,7 +74,6 @@ function App() {
         <button type="submit">Greet</button>
       </form>
       <p>{greetMsg}</p>
-      <div>Your user agent : {navigator.userAgent}</div>
       <div>Status : {res?.status}</div>
       <div>Status Text : {res?.statusText}</div>
       <div>RESPONSE : {res?.data?.slice(0, 100)}</div>

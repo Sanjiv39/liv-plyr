@@ -30,6 +30,15 @@ export type GenerateProxyOptions = {
   appendPathIfStream: boolean;
 };
 
+const isValidUrl = (url: string) => {
+  try {
+    new URL(url);
+    return true;
+  } catch (err) {
+    return false;
+  }
+};
+
 export const generateProxyConfig = (
   url: string,
   options?: Partial<GenerateProxyOptions>,
@@ -40,7 +49,8 @@ export const generateProxyConfig = (
     if (
       typeof url !== "string" ||
       !url.trim() ||
-      !url.trim().match(/^http(s|)\:\/\/[^.]+[.][^.]+/)
+      !url.trim().match(/^http(s|)\:\/\/[^.]+[.][^.]+/) ||
+      !isValidUrl(url.trim())
     ) {
       throw new Error(
         `Target URL must be a valid string in format [<http|https>://example.com]`
@@ -65,7 +75,7 @@ export const generateProxyConfig = (
     } = {
       appender: "",
       streamResponse: false,
-      appendPathIfStream: false,
+      appendPathIfStream: true,
       ...options,
     };
 

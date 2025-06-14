@@ -59,16 +59,22 @@ export const proxyRequest = async <T = any, R = any, D = any>(
       true
     ) as NonNullable<ReturnType<typeof generateProxyConfig>>;
 
+    const url = `/${proxyConfig.encodedConfigPath}`.trim().replace(/^\/+$/, "");
+
+    if (!url.trim()) {
+      throw new Error("Invalid encoded config path");
+    }
+
     if (method.match(/(put|post|patch)/)) {
       const res = (await PROXY[method]<T, R, D>(
-        proxyConfig.queryUrl,
+        url,
         data,
         axiosConfig
       )) as AxiosResponse<T, D>;
       return res;
     }
     const res = (await PROXY[method]<T, R, D>(
-      proxyConfig.queryUrl,
+      url,
       // @ts-ignore
       axiosConfig
     )) as AxiosResponse<T, D>;
