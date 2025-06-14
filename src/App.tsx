@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import Hls from "hls.js";
 import reactLogo from "./assets/react.svg";
@@ -20,27 +20,35 @@ const proxyData = generateProxyConfig(
 // hls.trigger;
 hls.loadSource(proxyData?.fullEncodedConfigUrl || "");
 
-const res: { status: number; statusText?: string; data: string } = await invoke(
-  "proxy_request",
-  {
-    req: {
-      url: url,
-      method: "GET",
-      headers: {
-        "User-Agent": "Smarters IPTV",
-      },
-    },
-  },
-  { headers: headers }
-);
+type Res = { status: number; statusText?: string; data: string };
 
 function App() {
   const [greetMsg, setGreetMsg] = useState("");
   const [name, setName] = useState("");
+  const [res, setRes] = useState<Res | null>(null);
 
   async function greet() {
     setGreetMsg(await invoke("greet", { name }));
   }
+
+  const initiate = async () => {
+    const res: Res | null = await invoke(
+      "proxy_request",
+      {
+        req: {
+          url: url,
+          method: "GET",
+          headers: headers,
+        },
+      },
+      { headers: headers }
+    );
+    setRes(res);
+  };
+
+  useEffect(() => {
+    initiate();
+  }, []);
 
   return (
     <main className="container">
