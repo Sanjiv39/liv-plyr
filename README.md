@@ -21,14 +21,16 @@ git clone --single-branch --branch dev https://github.com/Sanjiv39/liv-plyr
 cd liv-plyr
 ```
 
-2.Install Node dependencies
+2. Install Node dependencies
+
 ```bash
-npm install 
+npm install
 # or
 yarn add
 ```
 
 3. Push changes to a branch, here ui
+
 ```bash
 git add .
 git commit -m "some ui changes"
@@ -40,18 +42,22 @@ git push origin ui
 ---
 
 ### Development
+
 - Run the frontend on **development** mode
+
 ```bash
 npm run dev
 ```
+
 - Run the complete application on **development** mode
+
 ```bash
 npm run tauri dev
 ```
 
 - Build the application (current platform)
+
 ```bash
 # Builds frontend then rust backend for native os into respective executable file
 npm run tauri build
 ```
-
